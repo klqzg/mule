@@ -30,13 +30,14 @@ import org.mule.tck.testmodels.mule.TestTransaction;
 
 import java.util.Collection;
 
-import io.qameta.allure.Description;
-import io.qameta.allure.Feature;
-import io.qameta.allure.Story;
 import org.junit.After;
 import org.junit.Rule;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+
+import io.qameta.allure.Description;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Story;
 
 @RunWith(Parameterized.class)
 @Feature(PROCESSING_STRATEGIES)
@@ -57,7 +58,7 @@ public class TransactionAwareProactorStreamEmitterProcessingStrategyTestCase
   @Parameterized.Parameters(name = "{0}, {1}")
   public static Collection<Object[]> parameters() {
     return asList(new Object[][] {
-        {Mode.FLOW, true}, {SOURCE, true},
+        // {Mode.FLOW, true}, {SOURCE, true},
         {Mode.FLOW, false}, {SOURCE, false}});
   }
 
