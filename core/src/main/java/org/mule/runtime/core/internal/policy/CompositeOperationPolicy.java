@@ -17,6 +17,7 @@ import static org.mule.runtime.core.api.util.concurrent.FunctionalReadWriteLock.
 import static org.mule.runtime.core.internal.event.EventQuickCopy.quickCopy;
 import static org.mule.runtime.core.internal.policy.OperationPolicyContext.OPERATION_POLICY_CONTEXT;
 import static org.mule.runtime.core.internal.policy.OperationPolicyContext.from;
+import static org.mule.runtime.core.internal.util.rx.RxUtils.propagateCompletion;
 import static reactor.core.Exceptions.propagate;
 import static reactor.core.publisher.Flux.create;
 import static reactor.core.publisher.Flux.from;
@@ -37,7 +38,6 @@ import org.mule.runtime.core.internal.message.InternalEvent;
 import org.mule.runtime.core.internal.rx.FluxSinkRecorder;
 import org.mule.runtime.core.internal.util.rx.FluxSinkSupplier;
 import org.mule.runtime.core.internal.util.rx.RoundRobinFluxSinkSupplier;
-import org.mule.runtime.core.internal.util.rx.RxUtils;
 import org.mule.runtime.core.internal.util.rx.TransactionAwareFluxSinkSupplier;
 import org.mule.runtime.extension.api.runtime.operation.CompletableComponentExecutor.ExecutorCallback;
 
@@ -88,9 +88,10 @@ public class CompositeOperationPolicy
    * @param operation the operation on which the policies will be applied
    * @param parameterizedPolicies list of {@link Policy} to chain together.
    * @param operationPolicyParametersTransformer transformer from the operation parameters to a message and vice versa.
-   * @param operationPolicyProcessorFactory factory for creating each {@link OperationPolicy} from a {@link Policy}
-   * @param completionCallbackScheduler
-   * @param shutdownTimeout
+   * @param operationPolicyProcessorFactory factory for creating each {@link OperationPolicy} from a {@link Policy}.
+   * @param completionCallbackScheduler the executor where the completion of the policy flux will happen.
+   * @param shutdownTimeout how long to wait for pending items to finish processing before actually completing the flux for the
+   *        policy.
    */
   public CompositeOperationPolicy(Component operation, List<Policy> parameterizedPolicies,
                                   Optional<OperationPolicyParametersTransformer> operationPolicyParametersTransformer,
@@ -145,7 +146,7 @@ public class CompositeOperationPolicy
   protected Publisher<CoreEvent> applyNextOperation(Publisher<CoreEvent> eventPub, Policy lastPolicy) {
     FluxSinkRecorder<Either<Throwable, CoreEvent>> sinkRecorder = new FluxSinkRecorder<>();
 
-    return from(RxUtils.propagateCompletion(from(eventPub), create(sinkRecorder)
+    return from(propagateCompletion(from(eventPub), create(sinkRecorder)
         .map(result -> {
           result.applyLeft(t -> {
             throw propagate(t);
@@ -179,10 +180,10 @@ public class CompositeOperationPolicy
                 }
               });
             }), () -> sinkRecorder.complete(), t -> sinkRecorder.error(t),
-                                            shutdownTimeout,
-                                            completionCallbackScheduler))
-                                                .doOnNext(response -> from(response)
-                                                    .setNextOperationResponse((InternalEvent) response));
+                                    shutdownTimeout,
+                                    completionCallbackScheduler))
+                                        .doOnNext(response -> from(response)
+                                            .setNextOperationResponse((InternalEvent) response));
   }
 
   private Map<String, Object> resolveOperationParameters(CoreEvent event, OperationPolicyContext ctx) {

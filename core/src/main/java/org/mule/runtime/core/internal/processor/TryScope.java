@@ -27,6 +27,7 @@ import static org.mule.runtime.core.privileged.processor.MessageProcessors.getPr
 import static org.mule.runtime.core.privileged.processor.MessageProcessors.processToApply;
 import static org.slf4j.LoggerFactory.getLogger;
 import static reactor.core.publisher.Flux.from;
+import static reactor.core.publisher.Mono.just;
 import static reactor.core.publisher.Mono.subscriberContext;
 
 import org.mule.runtime.api.exception.DefaultMuleException;
@@ -51,8 +52,6 @@ import java.util.List;
 
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
-
-import reactor.core.publisher.Mono;
 
 /**
  * Wraps the invocation of a list of nested processors {@link org.mule.runtime.core.api.processor.Processor} with a transaction.
@@ -85,10 +84,10 @@ public class TryScope extends AbstractMessageProcessorOwner implements Scope {
           .flatMapMany(ctx -> from(publisher)
               .handle((event, sink) -> {
                 final boolean txPrevoiuslyActive = isTransactionActive();
-                Transaction previousTx = TransactionCoordination.getInstance().getTransaction();
+                Transaction previousTx = getCurrentTx();
                 try {
                   sink.next(executionTemplate.execute(() -> {
-                    Transaction currentTx = TransactionCoordination.getInstance().getTransaction();
+                    Transaction currentTx = getCurrentTx();
                     // Whether there wasn't a tx and now there is, or if there is a newer one (if we have a nested tx, using xa)
                     // we must set the component location of this try scope
                     if ((!txPrevoiuslyActive && isTransactionActive()) || (txPrevoiuslyActive && previousTx != currentTx)) {
@@ -96,7 +95,7 @@ public class TryScope extends AbstractMessageProcessorOwner implements Scope {
                       transaction.setComponentLocation(getLocation());
                     }
                     try {
-                      return Mono.just(event)
+                      return just(event)
                           .transform(nestedChain)
                           .onErrorStop()
                           .subscriberContext(ctx)
@@ -121,6 +120,10 @@ public class TryScope extends AbstractMessageProcessorOwner implements Scope {
     } else {
       return from(publisher).transform(nestedChain);
     }
+  }
+
+  private Transaction getCurrentTx() {
+    return TransactionCoordination.getInstance().getTransaction();
   }
 
   /**
